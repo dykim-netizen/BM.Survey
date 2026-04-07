@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -14,7 +13,7 @@
 <div id="root"></div>
 <script type="text/babel">
 const CORRECT_PW = "Qwermnbv00!";
-const GAS_URL = "https://script.google.com/macros/s/AKfycbw4fZTi7t4-KzYKAnaLzOZIUWPSMh7JuWFG9e2YEeItMDMh2hEA6Jyjj37NDbIBYTDM/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbw0MqS7WI8WR2Aejvfl5elcpBltshQCPEkestoGTl0vatPMsDt9GLS7IqVFDOw5s-1l/exec";
 const SCALE_IDS = ["q1","q3","q4","q5","q6","q7","q8"];
 const STORAGE_KEY = "quarterly_responses";
 const scaleLabels = {q1:"전반적 만족도",q3:"업무 강점 발휘",q4:"성장 체감",q5:"팀 커뮤니케이션",q6:"의견 표현 자유도",q7:"리더십",q8:"복지/제도 만족도"};
@@ -42,8 +41,17 @@ function App() {
   const [q10, setQ10] = React.useState("");
 
   React.useEffect(() => {
-    try { const d = localStorage.getItem(STORAGE_KEY); if(d) setResponses(JSON.parse(d)); } catch(e) {}
+    loadFromSheet();
   }, []);
+
+  function loadFromSheet() {
+    fetch(`${GAS_URL}?action=read`)
+      .then(r => r.json())
+      .then(d => { if(d.success) setResponses(d.data); })
+      .catch(() => {
+        try { const d = localStorage.getItem(STORAGE_KEY); if(d) setResponses(JSON.parse(d)); } catch(e) {}
+      });
+  }
 
   function saveResponses(nr) {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(nr)); } catch(e) {}
