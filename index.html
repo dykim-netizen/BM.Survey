@@ -45,12 +45,16 @@ function App() {
   }, []);
 
   function loadFromSheet() {
-    fetch(`${GAS_URL}?action=read`)
-      .then(r => r.json())
-      .then(d => { if(d.success) setResponses(d.data); })
-      .catch(() => {
-        try { const d = localStorage.getItem(STORAGE_KEY); if(d) setResponses(JSON.parse(d)); } catch(e) {}
-      });
+    var callbackName = "gasCallback_" + Date.now();
+    window[callbackName] = function(d) {
+      if(d.success) setResponses(d.data);
+      delete window[callbackName];
+      document.getElementById(callbackName) && document.getElementById(callbackName).remove();
+    };
+    var script = document.createElement("script");
+    script.id = callbackName;
+    script.src = GAS_URL + "?action=read&callback=" + callbackName;
+    document.body.appendChild(script);
   }
 
   function saveResponses(nr) {
