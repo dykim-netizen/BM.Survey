@@ -1,0 +1,438 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Beyond Music · 재직자 쿼털리 서베이</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>*{box-sizing:border-box;margin:0;padding:0;}body{background:#F7F4EF;font-family:sans-serif;color:#1A1A1A;}select,input,textarea,button{font-family:inherit;}</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const CORRECT_PW = "Qwermnbv00!";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbw4fZTi7t4-KzYKAnaLzOZIUWPSMh7JuWFG9e2YEeItMDMh2hEA6Jyjj37NDbIBYTDM/exec";
+const SCALE_IDS = ["q1","q3","q4","q5","q6","q7","q8"];
+const STORAGE_KEY = "quarterly_responses";
+const scaleLabels = {q1:"전반적 만족도",q3:"업무 강점 발휘",q4:"성장 체감",q5:"팀 커뮤니케이션",q6:"의견 표현 자유도",q7:"리더십",q8:"복지/제도 만족도"};
+
+function App() {
+  const [tab, setTab] = React.useState("survey");
+  const [responses, setResponses] = React.useState([]);
+  const [isAuth, setIsAuth] = React.useState(false);
+  const [logoClicks, setLogoClicks] = React.useState(0);
+  const [submitted, setSubmitted] = React.useState(false);
+  const [pw, setPw] = React.useState("");
+  const [pwError, setPwError] = React.useState(false);
+  const [csvText, setCsvText] = React.useState("");
+  const [csvOpen, setCsvOpen] = React.useState(false);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [name, setName] = React.useState("");
+  const [role, setRole] = React.useState("");
+  const [period, setPeriod] = React.useState("");
+  const [scales, setScales] = React.useState({q1:0,q3:0,q4:0,q5:0,q6:0,q7:0,q8:0});
+  const [q2yn, setQ2yn] = React.useState("");
+  const [q2reason, setQ2reason] = React.useState("");
+  const [q4reason, setQ4reason] = React.useState("");
+  const [q7reason, setQ7reason] = React.useState("");
+  const [q9, setQ9] = React.useState("");
+  const [q10, setQ10] = React.useState("");
+
+  React.useEffect(() => {
+    try { const d = localStorage.getItem(STORAGE_KEY); if(d) setResponses(JSON.parse(d)); } catch(e) {}
+  }, []);
+
+  function saveResponses(nr) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(nr)); } catch(e) {}
+    setResponses(nr);
+  }
+
+  function handleLogoClick() {
+    const n = logoClicks+1; setLogoClicks(n);
+    if(n>=5){setLogoClicks(0);setTab(isAuth?"results":"password");}
+  }
+
+  function submitSurvey() {
+    if(!name.trim()) return alert("이름을 입력해주세요!");
+    if(!role) return alert("역할을 선택해주세요!");
+    if(!period) return alert("시점을 선택해주세요!");
+    if(!q2yn) return alert("Q2 답변을 선택해주세요!");
+    for(const id of SCALE_IDS){ if(!scales[id]) return alert("점수 항목을 모두 선택해주세요!"); }
+    const entry = {
+      id: Date.now(), name:name.trim(), role, period,
+      date: new Date().toLocaleDateString("ko-KR"),
+      scales:{...scales}, q2yn,
+      q2reason: q2yn==="no"?q2reason:"-",
+      q4reason, q7reason,
+      q9:q9||"없음", q10:q10||"없음",
+    };
+    saveResponses([...responses, entry]);
+    try {
+      const p = new URLSearchParams({
+        name:entry.name, role:entry.role, period:entry.period, date:entry.date,
+        q1:entry.scales.q1, q2yn:entry.q2yn, q2reason:entry.q2reason,
+        q3:entry.scales.q3, q4:entry.scales.q4, q4reason:entry.q4reason,
+        q5:entry.scales.q5, q6:entry.scales.q6,
+        q7:entry.scales.q7, q7reason:entry.q7reason,
+        q8:entry.scales.q8, q9:entry.q9, q10:entry.q10,
+      });
+      new Image().src = `${GAS_URL}?${p.toString()}`;
+    } catch(e){}
+    setSubmitted(true);
+  }
+
+  function resetSurvey() {
+    setName(""); setRole(""); setPeriod("");
+    setScales({q1:0,q3:0,q4:0,q5:0,q6:0,q7:0,q8:0});
+    setQ2yn(""); setQ2reason(""); setQ4reason(""); setQ7reason("");
+    setQ9(""); setQ10(""); setSubmitted(false); setTab("survey");
+  }
+
+  function checkPassword() {
+    if(pw===CORRECT_PW){setIsAuth(true);setPwError(false);setPw("");setTab("results");}
+    else{setPwError(true);setPw("");}
+  }
+
+  function logout(){setIsAuth(false);setTab("survey");}
+
+  function clearAll(){
+    try{localStorage.removeItem(STORAGE_KEY);}catch(e){}
+    setResponses([]); setConfirmOpen(false);
+  }
+
+  function downloadCSV() {
+    const header = ["이름","역할","시점","날짜","Q1","Q2(Y/N)","Q2이유","Q3","Q4","Q4이유","Q5","Q6","Q7","Q7이유","Q8","Q9","Q10"];
+    const rows = responses.map(r=>[r.name,r.role,r.period,r.date,r.scales.q1,r.q2yn,r.q2reason,r.scales.q3,r.scales.q4,r.q4reason,r.scales.q5,r.scales.q6,r.scales.q7,r.q7reason,r.scales.q8,r.q9,r.q10]);
+    const csv = [header,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+    setCsvText(csv); setCsvOpen(true);
+  }
+
+  const scaleAvgs = SCALE_IDS.map(id=>{
+    const vals=responses.map(r=>r.scales[id]).filter(Boolean);
+    return vals.length?(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1):"-";
+  });
+
+  const s = {
+    nav:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 32px",background:"#2D5016",color:"white"},
+    logo:{fontFamily:"Georgia,serif",fontSize:17,cursor:"pointer",userSelect:"none"},
+    navBtn:(a)=>({background:a?"#7AB648":"transparent",border:`1px solid ${a?"#7AB648":"rgba(255,255,255,0.3)"}`,color:"white",padding:"7px 18px",borderRadius:20,fontSize:13,cursor:"pointer"}),
+    wrap:{maxWidth:680,margin:"40px auto",padding:"0 24px 80px"},
+    hero:{textAlign:"center",marginBottom:40},
+    tag:{display:"inline-block",background:"#E8F5D8",color:"#2D5016",fontSize:13,fontWeight:700,letterSpacing:2,textTransform:"uppercase",padding:"6px 16px",borderRadius:20,marginBottom:14},
+    h1:{fontFamily:"Georgia,serif",fontSize:34,color:"#2D5016",marginBottom:10,lineHeight:1.2},
+    muted:{fontSize:13,color:"#888",lineHeight:1.7},
+    metaRow:{display:"flex",gap:12,marginBottom:36,flexWrap:"wrap"},
+    input:{flex:1,minWidth:120,background:"white",border:"1.5px solid #E0DDD6",padding:"11px 14px",borderRadius:10,fontSize:14,color:"#1A1A1A",outline:"none"},
+    secTitle:{fontSize:13,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:"#2D5016",marginBottom:14,paddingBottom:8,borderBottom:"2px solid #E8F5D8"},
+    card:{background:"white",border:"1.5px solid #E0DDD6",borderRadius:14,padding:"14px 22px",marginBottom:14},
+    qLabel:{fontSize:14,fontWeight:500,lineHeight:1.5,marginBottom:18,display:"flex",alignItems:"flex-start",gap:8},
+    qNum:{display:"inline-flex",width:22,height:22,background:"#2D5016",color:"white",borderRadius:"50%",fontSize:11,fontWeight:700,alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1},
+    scaleWrap:{display:"flex",gap:8},
+    scaleBtn:(sel)=>({flex:1,aspectRatio:"1",border:`2px solid ${sel?"#2D5016":"#E0DDD6"}`,borderRadius:10,background:sel?"#2D5016":"#F7F4EF",color:sel?"white":"#999",fontWeight:700,fontSize:15,cursor:"pointer"}),
+    scaleLabels:{display:"flex",justifyContent:"space-between",marginTop:6,fontSize:10,color:"#aaa"},
+    ynWrap:{display:"flex",gap:10,marginBottom:12},
+    ynBtn:(sel,c)=>({flex:1,padding:"10px",border:`2px solid ${sel?c:"#E0DDD6"}`,borderRadius:10,background:sel?c:"#F7F4EF",color:sel?"white":"#999",fontWeight:700,fontSize:14,cursor:"pointer"}),
+    textarea:{width:"100%",minHeight:80,border:"1.5px solid #E0DDD6",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#1A1A1A",background:"#F7F4EF",resize:"vertical",outline:"none",lineHeight:1.6},
+    submitBtn:{width:"100%",padding:15,background:"#2D5016",color:"white",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer",marginTop:8},
+    pwWrap:{maxWidth:380,margin:"100px auto",padding:"0 24px",textAlign:"center"},
+    rWrap:{maxWidth:860,margin:"40px auto",padding:"0 24px 80px"},
+    statsGrid:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16,marginBottom:28},
+    statCard:{background:"white",border:"1.5px solid #E0DDD6",borderRadius:14,padding:20,textAlign:"center"},
+    statNum:{fontFamily:"Georgia,serif",fontSize:34,color:"#2D5016",lineHeight:1,marginBottom:6},
+    avgCard:{background:"white",border:"1.5px solid #E0DDD6",borderRadius:14,padding:24,marginBottom:20},
+    avgRow:{display:"flex",alignItems:"center",gap:14,marginBottom:12},
+    avgLabel:{fontSize:12,width:160,flexShrink:0,lineHeight:1.4},
+    avgTrack:{flex:1,height:8,background:"#E8F5D8",borderRadius:4,overflow:"hidden",position:"relative"},
+    avgFill:(p,a)=>({height:"100%",width:`${p}%`,background:a?"#7AB648":"#E74C3C",borderRadius:4}),
+    avgScore:{fontWeight:700,fontSize:13,width:28,textAlign:"right"},
+    respCard:{background:"white",border:"1.5px solid #E0DDD6",borderRadius:14,overflow:"hidden",marginBottom:20},
+    chip:(c)=>({display:"inline-block",background:c||"#E8F5D8",color:c?"white":"#2D5016",fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:20}),
+    scoreBadge:{fontSize:11,padding:"3px 8px",borderRadius:6,background:"#F7F4EF",border:"1px solid #E0DDD6",marginRight:6,marginBottom:4,display:"inline-block"},
+    textBox:{fontSize:12,color:"#888",lineHeight:1.6,background:"#F7F4EF",padding:"8px 12px",borderRadius:8,marginTop:8},
+    overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:24},
+    modal:{background:"white",borderRadius:16,padding:28,width:"100%",maxWidth:480,display:"flex",flexDirection:"column"},
+  };
+
+  if(submitted) return (
+    <div style={{fontFamily:"sans-serif",background:"#F7F4EF",minHeight:"100vh"}}>
+      <nav style={s.nav}><div style={s.logo} onClick={handleLogoClick}>Beyond Music · People Team</div></nav>
+      <div style={{textAlign:"center",marginTop:100,padding:"0 24px"}}>
+        <div style={{fontSize:52,marginBottom:16}}>🌿</div>
+        <div style={{fontFamily:"Georgia,serif",fontSize:28,color:"#2D5016",marginBottom:10}}>제출 완료!</div>
+        <div style={{fontSize:14,color:"#888",marginBottom:28}}>소중한 의견 감사해요.<br/>피플팀이 꼼꼼히 확인할게요.</div>
+        <button style={{...s.submitBtn,maxWidth:300,margin:"0 auto",display:"block"}} onClick={resetSurvey}>확인</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{fontFamily:"sans-serif",background:"#F7F4EF",minHeight:"100vh",color:"#1A1A1A"}}>
+      {csvOpen && (
+        <div style={s.overlay}>
+          <div style={s.modal}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <div style={{fontFamily:"Georgia,serif",fontSize:18,color:"#2D5016"}}>📋 CSV 데이터</div>
+              <button style={{background:"transparent",border:"none",fontSize:20,cursor:"pointer",color:"#888"}} onClick={()=>setCsvOpen(false)}>✕</button>
+            </div>
+            <div style={{fontSize:12,color:"#888",marginBottom:12}}>아래 텍스트를 전체 선택 후 복사해서 엑셀에 붙여넣기 하세요.</div>
+            <textarea readOnly value={csvText} style={{fontFamily:"monospace",fontSize:11,border:"1.5px solid #E0DDD6",borderRadius:8,padding:12,resize:"none",background:"#F7F4EF",color:"#1A1A1A",lineHeight:1.6,minHeight:200}} onClick={e=>e.target.select()}/>
+            <button style={{marginTop:12,background:"#2D5016",color:"white",border:"none",padding:10,borderRadius:8,fontSize:13,fontWeight:700,cursor:"pointer"}} onClick={()=>navigator.clipboard.writeText(csvText).then(()=>alert("복사됐어요!"))}>복사하기</button>
+          </div>
+        </div>
+      )}
+      {confirmOpen && (
+        <div style={s.overlay}>
+          <div style={{...s.modal,maxWidth:360,textAlign:"center"}}>
+            <div style={{fontSize:36,marginBottom:12}}>🗑️</div>
+            <div style={{fontFamily:"Georgia,serif",fontSize:18,color:"#2D5016",marginBottom:8}}>전체 초기화</div>
+            <div style={{fontSize:13,color:"#888",marginBottom:24}}>모든 응답이 삭제돼요.<br/>정말 삭제할까요?</div>
+            <div style={{display:"flex",gap:8}}>
+              <button style={{flex:1,background:"transparent",border:"1.5px solid #E0DDD6",color:"#888",padding:10,borderRadius:8,fontSize:13,cursor:"pointer"}} onClick={()=>setConfirmOpen(false)}>취소</button>
+              <button style={{flex:1,background:"#C0392B",border:"none",color:"white",padding:10,borderRadius:8,fontSize:13,fontWeight:700,cursor:"pointer"}} onClick={clearAll}>삭제</button>
+            </div>
+          </div>
+        </div>
+      )}
+      <nav style={s.nav}>
+        <div style={s.logo} onClick={handleLogoClick}>Beyond Music · People Team</div>
+        <div style={{display:"flex",gap:8}}>
+          <button style={s.navBtn(tab==="survey")} onClick={()=>setTab("survey")}>📝 설문 작성</button>
+          {(tab==="results"||tab==="password") && <button style={s.navBtn(true)} onClick={()=>setTab(isAuth?"results":"password")}>📊 응답 결과</button>}
+        </div>
+      </nav>
+
+      {tab==="survey" && (
+        <div style={s.wrap}>
+          <div style={s.hero}>
+            <div style={s.tag}>Quarterly Survey</div>
+            <div style={s.h1}>지금 어떠세요?</div>
+            <div style={s.muted}>솔직한 답변이 비욘드뮤직을 더 좋은 곳으로 만들어요.<br/>모든 응답은 피플팀만 확인합니다 🌿</div>
+          </div>
+          <div style={s.metaRow}>
+            <input style={s.input} placeholder="이름을 입력해주세요" value={name} onChange={e=>setName(e.target.value)}/>
+            <select style={s.input} value={role} onChange={e=>setRole(e.target.value)}>
+              <option value="">역할 선택</option>
+              <option value="리더">리더</option>
+              <option value="구성원">구성원</option>
+            </select>
+            <select style={s.input} value={period} onChange={e=>setPeriod(e.target.value)}>
+              <option value="">시점 선택</option>
+              <option value="상반기">상반기</option>
+              <option value="하반기">하반기</option>
+            </select>
+          </div>
+
+          <div style={{marginBottom:36}}>
+            <div style={s.secTitle}>🏢 회사 및 조직 만족도</div>
+            <div style={s.card}>
+              <div style={s.qLabel}><span style={s.qNum}>1</span><span>현재 회사에서의 전반적인 만족도는 어떠신가요?</span></div>
+              <div style={s.scaleWrap}>{[1,2,3,4,5].map(v=><button key={v} style={s.scaleBtn(scales.q1===v)} onClick={()=>setScales({...scales,q1:v})}>{v}</button>)}</div>
+              <div style={s.scaleLabels}><span>전혀 그렇지 않다</span><span>매우 그렇다</span></div>
+            </div>
+            <div style={s.card}>
+              <div style={s.qLabel}><span style={s.qNum}>2</span><span>회사 방향성과 목표에 대해 충분히 이해하고 있다고 느끼시나요?</span></div>
+              <div style={s.ynWrap}>
+                <button style={s.ynBtn(q2yn==="yes","#2D5016")} onClick={()=>setQ2yn("yes")}>✅ Yes</button>
+                <button style={s.ynBtn(q2yn==="no","#E74C3C")} onClick={()=>setQ2yn("no")}>❌ No</button>
+              </div>
+              {q2yn==="no" && <textarea style={s.textarea} placeholder="이해하기 어려운 부분이 있다면 이유를 알려주세요." value={q2reason} onChange={e=>setQ2reason(e.target.value)}/>}
+            </div>
+          </div>
+
+          <div style={{marginBottom:36}}>
+            <div style={s.secTitle}>💼 업무 및 성장</div>
+            <div style={s.card}>
+              <div style={s.qLabel}><span style={s.qNum}>3</span><span>지금 맡은 업무에서 내 강점을 충분히 발휘하고 있다고 느끼시나요?</span></div>
+              <div style={s.scaleWrap}>{[1,2,3,4,5].map(v=><button key={v} style={s.scaleBtn(scales.q3===v)} onClick={()=>setScales({...scales,q3:v})}>{v}</button>)}</div>
+              <div style={s.scaleLabels}><span>전혀 그렇지 않다</span><span>매우 그렇다</span></div>
+            </div>
+            <div style={s.card}>
+              <div style={s.qLabel}><span style={s.qNum}>4</span><span>현재 회사에서 성장하고 있다고 느끼시나요?</span></div>
+              <div style={s.scaleWrap}>{[1,2,3,4,5].map(v=><button key={v} style={s.scaleBtn(scales.q4===v)} onClick={()=>setScales({...scales,q4:v})}>{v}</button>)}</div>
+              <div style={s.scaleLabels}><span>전혀 그렇지 않다</span><span>매우 그렇다</span></div>
+              <textarea style={{...s.textarea,marginTop:12}} placeholder="그렇지 않다면 이유는 무엇인가요?" value={q4reason} onChange={e=>setQ4reason(e.target.value)}/>
+            </div>
+          </div>
+
+          <div style={{marginBottom:36}}>
+            <div style={s.secTitle}>💬 커뮤니케이션</div>
+            <div style={s.card}>
+              <div style={s.qLabel}><span style={s.qNum}>5</span><span>팀 내 커뮤니케이션은 원활하게 이루어지고 있다고 느끼시나요?</span></div>
+              <div style={s.scaleWrap}>{[1,2,3,4,5].map(v=><button key={v} style={s.scaleBtn(scales.q5===v)} onClick={()=>setScales({...scales,q5:v})}>{v}</button>)}</div>
+              <div style={s.scaleLabels}><span>전혀 그렇지 않다</span><span>매우 그렇다</span></div>
+            </div>
+            <div style={s.card}>
+              <div style={s.qLabel}><span style={s.qNum}>6</span><span>회사에서 의견을 자유롭게 말할 수 있는 분위기라고 느끼시나요?</span></div>
+              <div style={s.scaleWrap}>{[1,2,3,4,5].map(v=><button key={v} style={s.scaleBtn(scales.q6===v)} onClick={()=>setScales({...scales,q6:v})}>{v}</button>)}</div>
+              <div style={s.scaleLabels}><span>전혀 그렇지 않다</span><span>매우 그렇다</span></div>
+            </div>
+          </div>
+
+          <div style={{marginBottom:36}}>
+            <div style={s.secTitle}>🤝 리더십</div>
+            <div style={s.card}>
+              <div style={s.qLabel}>
+                <span style={s.qNum}>7</span>
+                <span>{role==="리더"?"팀원이 업무 방향성을 충분히 이해하고 잘 따라오고 있다고 느끼시나요? (리더용)":role==="구성원"?"리더는 팀원의 의견을 충분히 경청한다고 느끼시나요? (구성원용)":"리더십 관련 질문입니다. 역할을 먼저 선택해주세요."}</span>
+              </div>
+              <div style={s.scaleWrap}>{[1,2,3,4,5].map(v=><button key={v} style={s.scaleBtn(scales.q7===v)} onClick={()=>setScales({...scales,q7:v})}>{v}</button>)}</div>
+              <div style={s.scaleLabels}><span>전혀 그렇지 않다</span><span>매우 그렇다</span></div>
+              <textarea style={{...s.textarea,marginTop:12}} placeholder="그렇지 않다면 이유는 무엇인가요?" value={q7reason} onChange={e=>setQ7reason(e.target.value)}/>
+            </div>
+          </div>
+
+          <div style={{marginBottom:36}}>
+            <div style={s.secTitle}>🎁 제도 및 복지</div>
+            <div style={s.card}>
+              <div style={s.qLabel}><span style={s.qNum}>8</span><span>현재 회사의 복지 및 제도에 대해 전반적으로 만족하시나요?</span></div>
+              <div style={s.scaleWrap}>{[1,2,3,4,5].map(v=><button key={v} style={s.scaleBtn(scales.q8===v)} onClick={()=>setScales({...scales,q8:v})}>{v}</button>)}</div>
+              <div style={s.scaleLabels}><span>전혀 그렇지 않다</span><span>매우 그렇다</span></div>
+            </div>
+          </div>
+
+          <div style={{marginBottom:36}}>
+            <div style={s.secTitle}>💬 자유 의견</div>
+            <div style={s.card}>
+              <div style={s.qLabel}><span style={s.qNum}>9</span><span>현재 가장 만족하는 제도나 문화는 무엇인가요?</span></div>
+              <textarea style={s.textarea} placeholder="없으면 '없음'으로 작성해주세요" value={q9} onChange={e=>setQ9(e.target.value)}/>
+            </div>
+            <div style={s.card}>
+              <div style={s.qLabel}><span style={s.qNum}>10</span><span>개선이 필요한 제도나 문화가 있다면 적어주세요.</span></div>
+              <textarea style={s.textarea} placeholder="없으면 '없음'으로 작성해주세요" value={q10} onChange={e=>setQ10(e.target.value)}/>
+            </div>
+          </div>
+          <button style={s.submitBtn} onClick={submitSurvey}>제출하기 →</button>
+        </div>
+      )}
+
+      {tab==="password" && (
+        <div style={s.pwWrap}>
+          <div style={{fontSize:48,marginBottom:16}}>🔒</div>
+          <div style={{fontFamily:"Georgia,serif",fontSize:24,color:"#2D5016",marginBottom:8}}>피플팀 전용</div>
+          <div style={{fontSize:13,color:"#888",lineHeight:1.7,marginBottom:28}}>응답 결과는 피플팀만 확인할 수 있어요.<br/>비밀번호를 입력해주세요.</div>
+          <div style={{display:"flex",gap:8,marginBottom:8}}>
+            <input style={{...s.input,flex:1}} type="password" placeholder="비밀번호 입력" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&checkPassword()}/>
+            <button style={{background:"#2D5016",color:"white",border:"none",padding:"12px 20px",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer"}} onClick={checkPassword}>확인</button>
+          </div>
+          {pwError && <div style={{fontSize:13,color:"#C0392B",marginTop:6}}>⚠️ 비밀번호가 틀렸어요!</div>}
+        </div>
+      )}
+
+      {tab==="results" && isAuth && (
+        <div style={s.rWrap}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:28,flexWrap:"wrap",gap:8}}>
+            <div style={{fontFamily:"Georgia,serif",fontSize:26,color:"#2D5016"}}>응답 결과</div>
+            <div style={{display:"flex",gap:8}}>
+              <button style={{background:"#2D5016",border:"none",color:"white",padding:"8px 14px",borderRadius:8,fontSize:12,cursor:"pointer"}} onClick={downloadCSV}>⬇️ CSV</button>
+              <button style={{background:"transparent",border:"1.5px solid #E0DDD6",color:"#C0392B",padding:"8px 14px",borderRadius:8,fontSize:12,cursor:"pointer"}} onClick={()=>setConfirmOpen(true)}>전체 초기화</button>
+              <button style={{background:"transparent",border:"1.5px solid #E0DDD6",color:"#888",padding:"8px 14px",borderRadius:8,fontSize:12,cursor:"pointer"}} onClick={logout}>나가기</button>
+            </div>
+          </div>
+          {responses.length===0?(
+            <div style={{textAlign:"center",padding:60,color:"#888"}}>
+              <div style={{fontSize:40,marginBottom:12}}>📭</div><div>아직 응답이 없어요!</div>
+            </div>
+          ):(
+            <>
+              <div style={s.statsGrid}>
+                <div style={s.statCard}><div style={s.statNum}>{responses.length}</div><div style={{fontSize:12,color:"#888"}}>총 응답 수</div></div>
+                <div style={s.statCard}><div style={s.statNum}>{responses.filter(r=>r.role==="리더").length}</div><div style={{fontSize:12,color:"#888"}}>리더 응답</div></div>
+                <div style={s.statCard}><div style={s.statNum}>{responses.filter(r=>r.role==="구성원").length}</div><div style={{fontSize:12,color:"#888"}}>구성원 응답</div></div>
+              </div>
+              <div style={s.avgCard}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
+                  <div style={s.secTitle}>📊 문항별 평균 점수</div>
+                  <div style={{display:"flex",alignItems:"center",gap:12,fontSize:11,color:"#888"}}>
+                    <span style={{display:"flex",alignItems:"center",gap:4}}><span style={{display:"inline-block",width:10,height:10,background:"#7AB648",borderRadius:2}}></span>3.0 이상 ✅</span>
+                    <span style={{display:"flex",alignItems:"center",gap:4}}><span style={{display:"inline-block",width:10,height:10,background:"#E74C3C",borderRadius:2}}></span>3.0 미만 ⚠️</span>
+                    <span style={{display:"flex",alignItems:"center",gap:4}}><span style={{display:"inline-block",width:2,height:12,background:"#E67E22",borderRadius:1}}></span>기준선 3.0</span>
+                  </div>
+                </div>
+                {SCALE_IDS.map((id,i)=>{
+                  const avg=scaleAvgs[i];
+                  const pct=avg!=="-"?parseFloat(avg)/5*100:0;
+                  const isAbove=avg!=="-"&&parseFloat(avg)>=3;
+                  return(
+                    <div key={id} style={s.avgRow}>
+                      <div style={s.avgLabel}>{scaleLabels[id]}</div>
+                      <div style={s.avgTrack}>
+                        <div style={s.avgFill(pct,isAbove)}/>
+                        <div style={{position:"absolute",top:-3,left:"60%",width:2,height:14,background:"#E67E22",borderRadius:1}}/>
+                      </div>
+                      <div style={{...s.avgScore,color:isAbove?"#2D5016":"#E74C3C"}}>{avg}</div>
+                      <div style={{fontSize:14,width:20}}>{avg==="-"?"":isAbove?"✅":"⚠️"}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{background:"white",border:"1.5px solid #E0DDD6",borderRadius:14,overflow:"hidden",marginBottom:20}}>
+                <div style={{...s.secTitle,padding:"18px 24px",marginBottom:0,borderBottom:"1.5px solid #E0DDD6"}}>📋 이름별 점수 현황</div>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                    <thead>
+                      <tr style={{background:"#F7F4EF"}}>
+                        {["이름","역할","시점","날짜","Q1","Q2","Q3","Q4","Q5","Q6","Q7","Q8","평균"].map(h=>(
+                          <th key={h} style={{padding:"10px 12px",textAlign:"center",fontWeight:700,color:"#2D5016",borderBottom:"1.5px solid #E0DDD6",whiteSpace:"nowrap"}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...responses].reverse().map((r,idx)=>{
+                        const avg=(SCALE_IDS.map(id=>r.scales[id]).reduce((a,b)=>a+b,0)/SCALE_IDS.length).toFixed(1);
+                        return(
+                          <tr key={r.id} style={{background:idx%2===0?"white":"#FAFAF7"}}>
+                            <td style={{padding:"10px 12px",fontWeight:700,borderBottom:"1px solid #F0EDE6",whiteSpace:"nowrap"}}>{r.name}</td>
+                            <td style={{padding:"10px 12px",textAlign:"center",borderBottom:"1px solid #F0EDE6"}}><span style={s.chip(r.role==="리더"?"#2D5016":null)}>{r.role}</span></td>
+                            <td style={{padding:"10px 12px",textAlign:"center",borderBottom:"1px solid #F0EDE6"}}><span style={s.chip()}>{r.period}</span></td>
+                            <td style={{padding:"10px 12px",textAlign:"center",borderBottom:"1px solid #F0EDE6",color:"#aaa",fontSize:11}}>{r.date}</td>
+                            <td style={{padding:"10px 12px",textAlign:"center",borderBottom:"1px solid #F0EDE6",fontWeight:600,color:r.scales.q1>=4?"#2D5016":r.scales.q1===3?"#888":"#C0392B"}}>{r.scales.q1}</td>
+                            <td style={{padding:"10px 12px",textAlign:"center",borderBottom:"1px solid #F0EDE6",fontWeight:600,color:r.q2yn==="yes"?"#2D5016":"#C0392B"}}>{r.q2yn==="yes"?"Y":"N"}</td>
+                            {["q3","q4","q5","q6","q7","q8"].map(id=>(
+                              <td key={id} style={{padding:"10px 12px",textAlign:"center",borderBottom:"1px solid #F0EDE6",fontWeight:600,color:r.scales[id]>=4?"#2D5016":r.scales[id]===3?"#888":"#C0392B"}}>{r.scales[id]}</td>
+                            ))}
+                            <td style={{padding:"10px 12px",textAlign:"center",borderBottom:"1px solid #F0EDE6",fontWeight:700,color:"#2D5016"}}>{avg}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div style={s.respCard}>
+                <div style={{...s.secTitle,padding:"18px 24px",marginBottom:0,borderBottom:"1.5px solid #E0DDD6"}}>📋 개별 응답 ({responses.length}건)</div>
+                {[...responses].reverse().map(r=>(
+                  <div key={r.id} style={{padding:"18px 24px",borderBottom:"1px solid #F0EDE6"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,flexWrap:"wrap"}}>
+                      <div style={{fontWeight:700,fontSize:14}}>{r.name}</div>
+                      <span style={s.chip(r.role==="리더"?"#2D5016":null)}>{r.role}</span>
+                      <span style={s.chip()}>{r.period}</span>
+                      <div style={{fontSize:11,color:"#aaa",marginLeft:"auto"}}>{r.date}</div>
+                    </div>
+                    <div style={{marginBottom:8}}>
+                      {SCALE_IDS.map(id=>(
+                        <span key={id} style={s.scoreBadge}>Q{id.slice(1)} <strong style={{color:"#2D5016"}}>{r.scales[id]}점</strong></span>
+                      ))}
+                      <span style={{...s.scoreBadge,color:r.q2yn==="yes"?"#2D5016":"#C0392B"}}>Q2 <strong>{r.q2yn==="yes"?"Y":"N"}</strong></span>
+                    </div>
+                    {r.q2reason!=="-"&&<div style={s.textBox}>❓ Q2 이유: {r.q2reason}</div>}
+                    {r.q4reason&&r.q4reason!=="-"&&<div style={{...s.textBox,marginTop:6}}>❓ Q4 이유: {r.q4reason}</div>}
+                    {r.q7reason&&r.q7reason!=="-"&&<div style={{...s.textBox,marginTop:6}}>❓ Q7 이유: {r.q7reason}</div>}
+                    {r.q9!=="없음"&&<div style={{...s.textBox,marginTop:6}}>✅ 만족 제도: {r.q9}</div>}
+                    {r.q10!=="없음"&&<div style={{...s.textBox,marginTop:6}}>🔧 개선 사항: {r.q10}</div>}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
