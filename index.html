@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -84,7 +83,7 @@ function App() {
     };
     saveResponses([...responses, entry]);
     try {
-      const p = new URLSearchParams({
+      const params = new URLSearchParams({
         name:entry.name, role:entry.role, period:entry.period, date:entry.date,
         q1:entry.scales.q1, q2yn:entry.q2yn, q2reason:entry.q2reason,
         q3:entry.scales.q3, q4:entry.scales.q4, q4reason:entry.q4reason,
@@ -92,7 +91,16 @@ function App() {
         q7:entry.scales.q7, q7reason:entry.q7reason,
         q8:entry.scales.q8, q9:entry.q9, q10:entry.q10,
       });
-      new Image().src = `${GAS_URL}?${p.toString()}`;
+      const cbName = "submitCb_" + Date.now();
+      window[cbName] = function(d) {
+        delete window[cbName];
+        const el = document.getElementById(cbName);
+        if(el) el.remove();
+      };
+      const script = document.createElement("script");
+      script.id = cbName;
+      script.src = `${GAS_URL}?${params.toString()}&callback=${cbName}`;
+      document.body.appendChild(script);
     } catch(e){}
     setSubmitted(true);
   }
