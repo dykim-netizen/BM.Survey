@@ -23,7 +23,8 @@ function App() {
   const [responses, setResponses] = React.useState([]);
   const [isAuth, setIsAuth] = React.useState(false);
   const [logoClicks, setLogoClicks] = React.useState(0);
-  const [submitted, setSubmitted] = React.useState(false);
+  // ✅ 변경: submitted → submitState ("idle" | "loading" | "success" | "error")
+  const [submitState, setSubmitState] = React.useState("idle");
   const [pw, setPw] = React.useState("");
   const [pwError, setPwError] = React.useState(false);
   const [csvText, setCsvText] = React.useState("");
@@ -39,6 +40,7 @@ function App() {
   const [q7reason, setQ7reason] = React.useState("");
   const [q9, setQ9] = React.useState("");
   const [q10, setQ10] = React.useState("");
+  const [pendingEntry, setPendingEntry] = React.useState(null);
 
   React.useEffect(() => {
     loadFromSheet();
@@ -49,7 +51,8 @@ function App() {
     window[callbackName] = function(d) {
       if(d.success) setResponses(d.data);
       delete window[callbackName];
-      document.getElementById(callbackName) && document.getElementById(callbackName).remove();
+      const el = document.getElementById(callbackName);
+      if(el) el.remove();
     };
     var script = document.createElement("script");
     script.id = callbackName;
@@ -67,12 +70,55 @@ function App() {
     if(n>=5){setLogoClicks(0);setTab(isAuth?"results":"password");}
   }
 
-  function submitSurvey() {
+  // ✅ 변경: GAS 전송 성공 확인 후 submitState 변경
+  function sendToGAS(entry) {
+    return new Promise((resolve, reject) => {
+      const cbName = "submitCb_" + Date.now();
+      const timeout = setTimeout(() => {
+        delete window[cbName];
+        const el = document.getElementById(cbName);
+        if(el) el.remove();
+        reject(new Error("timeout"));
+      }, 15000); // 15초 타임아웃
+
+      window[cbName] = function(d) {
+        clearTimeout(timeout);
+        delete window[cbName];
+        const el = document.getElementById(cbName);
+        if(el) el.remove();
+        if(d && d.success) resolve(d);
+        else reject(new Error("GAS returned failure"));
+      };
+
+      const params = new URLSearchParams({
+        name:entry.name, role:entry.role, period:entry.period, date:entry.date,
+        q1:entry.scales.q1, q2yn:entry.q2yn, q2reason:entry.q2reason,
+        q3:entry.scales.q3, q4:entry.scales.q4, q4reason:entry.q4reason,
+        q5:entry.scales.q5, q6:entry.scales.q6,
+        q7:entry.scales.q7, q7reason:entry.q7reason,
+        q8:entry.scales.q8, q9:entry.q9, q10:entry.q10,
+        callback: cbName,
+      });
+
+      const script = document.createElement("script");
+      script.id = cbName;
+      script.src = `${GAS_URL}?${params.toString()}`;
+      script.onerror = () => {
+        clearTimeout(timeout);
+        delete window[cbName];
+        reject(new Error("script load error"));
+      };
+      document.body.appendChild(script);
+    });
+  }
+
+  async function submitSurvey() {
     if(!name.trim()) return alert("이름을 입력해주세요!");
     if(!role) return alert("역할을 선택해주세요!");
     if(!period) return alert("시점을 선택해주세요!");
     if(!q2yn) return alert("Q2 답변을 선택해주세요!");
     for(const id of SCALE_IDS){ if(!scales[id]) return alert("점수 항목을 모두 선택해주세요!"); }
+
     const entry = {
       id: Date.now(), name:name.trim(), role, period,
       date: new Date().toLocaleDateString("ko-KR"),
@@ -81,35 +127,37 @@ function App() {
       q4reason, q7reason,
       q9:q9||"없음", q10:q10||"없음",
     };
-    saveResponses([...responses, entry]);
+
+    setPendingEntry(entry);
+    setSubmitState("loading");
+
     try {
-      const params = new URLSearchParams({
-        name:entry.name, role:entry.role, period:entry.period, date:entry.date,
-        q1:entry.scales.q1, q2yn:entry.q2yn, q2reason:entry.q2reason,
-        q3:entry.scales.q3, q4:entry.scales.q4, q4reason:entry.q4reason,
-        q5:entry.scales.q5, q6:entry.scales.q6,
-        q7:entry.scales.q7, q7reason:entry.q7reason,
-        q8:entry.scales.q8, q9:entry.q9, q10:entry.q10,
-      });
-      const cbName = "submitCb_" + Date.now();
-      window[cbName] = function(d) {
-        delete window[cbName];
-        const el = document.getElementById(cbName);
-        if(el) el.remove();
-      };
-      const script = document.createElement("script");
-      script.id = cbName;
-      script.src = `${GAS_URL}?${params.toString()}&callback=${cbName}`;
-      document.body.appendChild(script);
-    } catch(e){}
-    setSubmitted(true);
+      await sendToGAS(entry);
+      saveResponses([...responses, entry]);
+      setSubmitState("success");
+    } catch(e) {
+      setSubmitState("error");
+    }
+  }
+
+  // ✅ 실패 시 재시도
+  async function retrySubmit() {
+    if(!pendingEntry) return;
+    setSubmitState("loading");
+    try {
+      await sendToGAS(pendingEntry);
+      saveResponses([...responses, pendingEntry]);
+      setSubmitState("success");
+    } catch(e) {
+      setSubmitState("error");
+    }
   }
 
   function resetSurvey() {
     setName(""); setRole(""); setPeriod("");
     setScales({q1:0,q3:0,q4:0,q5:0,q6:0,q7:0,q8:0});
     setQ2yn(""); setQ2reason(""); setQ4reason(""); setQ7reason("");
-    setQ9(""); setQ10(""); setSubmitted(false); setTab("survey");
+    setQ9(""); setQ10(""); setSubmitState("idle"); setPendingEntry(null); setTab("survey");
   }
 
   function checkPassword() {
@@ -177,7 +225,20 @@ function App() {
     modal:{background:"white",borderRadius:16,padding:28,width:"100%",maxWidth:480,display:"flex",flexDirection:"column"},
   };
 
-  if(submitted) return (
+  // ✅ 로딩 화면
+  if(submitState === "loading") return (
+    <div style={{fontFamily:"sans-serif",background:"#F7F4EF",minHeight:"100vh"}}>
+      <nav style={s.nav}><div style={s.logo} onClick={handleLogoClick}>Beyond Music · People Team</div></nav>
+      <div style={{textAlign:"center",marginTop:100,padding:"0 24px"}}>
+        <div style={{fontSize:52,marginBottom:16}}>⏳</div>
+        <div style={{fontFamily:"Georgia,serif",fontSize:24,color:"#2D5016",marginBottom:10}}>제출 중...</div>
+        <div style={{fontSize:14,color:"#888"}}>잠시만 기다려주세요.</div>
+      </div>
+    </div>
+  );
+
+  // ✅ 성공 화면
+  if(submitState === "success") return (
     <div style={{fontFamily:"sans-serif",background:"#F7F4EF",minHeight:"100vh"}}>
       <nav style={s.nav}><div style={s.logo} onClick={handleLogoClick}>Beyond Music · People Team</div></nav>
       <div style={{textAlign:"center",marginTop:100,padding:"0 24px"}}>
@@ -185,6 +246,27 @@ function App() {
         <div style={{fontFamily:"Georgia,serif",fontSize:28,color:"#2D5016",marginBottom:10}}>제출 완료!</div>
         <div style={{fontSize:14,color:"#888",marginBottom:28}}>소중한 의견 감사해요.<br/>피플팀이 꼼꼼히 확인할게요.</div>
         <button style={{...s.submitBtn,maxWidth:300,margin:"0 auto",display:"block"}} onClick={resetSurvey}>확인</button>
+      </div>
+    </div>
+  );
+
+  // ✅ 실패 화면
+  if(submitState === "error") return (
+    <div style={{fontFamily:"sans-serif",background:"#F7F4EF",minHeight:"100vh"}}>
+      <nav style={s.nav}><div style={s.logo} onClick={handleLogoClick}>Beyond Music · People Team</div></nav>
+      <div style={{textAlign:"center",marginTop:100,padding:"0 24px"}}>
+        <div style={{fontSize:52,marginBottom:16}}>😥</div>
+        <div style={{fontFamily:"Georgia,serif",fontSize:24,color:"#C0392B",marginBottom:10}}>제출에 실패했어요</div>
+        <div style={{fontSize:14,color:"#888",marginBottom:8,lineHeight:1.7}}>
+          네트워크 문제로 전송이 안 됐어요.<br/>
+          <strong>카카오톡 / 인앱브라우저</strong>를 쓰고 계신다면<br/>
+          Safari 또는 Chrome으로 열어서 다시 시도해주세요.
+        </div>
+        <div style={{fontSize:12,color:"#aaa",marginBottom:28}}>입력하신 내용은 그대로 있어요 — 다시 제출해도 돼요.</div>
+        <div style={{display:"flex",gap:10,maxWidth:340,margin:"0 auto"}}>
+          <button style={{...s.submitBtn,background:"#888",flex:1}} onClick={()=>setSubmitState("idle")}>← 돌아가기</button>
+          <button style={{...s.submitBtn,flex:1}} onClick={retrySubmit}>다시 시도 →</button>
+        </div>
       </div>
     </div>
   );
